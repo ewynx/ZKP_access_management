@@ -2,7 +2,7 @@
 
 The SecretPetSociety is planning to have an online gathering space, and wants to give members the possibility to enter the space without revealing who they are. 
 
-![SPS](SPS.png)
+![SPS](SecretPetSociety.png)
 
 This Access Management System contains the following functionality:
 - Award AccessPass (only by authority)
