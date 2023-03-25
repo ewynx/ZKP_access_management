@@ -1,3 +1,3 @@
-import { Add } from './Add.js';
+import { SPSAccessManagement } from './SPSAccessManagement.js';
 
-export { Add };
+export { SPSAccessManagement };
