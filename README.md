@@ -1,13 +1,11 @@
-# Mina zkApp: Proj2_secret_society
-
-![SPS](SPS.png)
-
+# Mina zkApp: ZKP Access Management
 
 The SecretPetSociety is planning to have an online gathering space, and wants to give members the possibility to enter the space without revealing who they are. 
 
+![SPS](SPS.png)
+
 This Access Management System contains the following functionality:
-- Create AccessPass
-- Award AccessPass
+- Award AccessPass (only by authority)
 - Transfer ownership of AccessPass
 - Authenticate anonymously
 
