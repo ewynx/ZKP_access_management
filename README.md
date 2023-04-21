@@ -1,8 +1,11 @@
-# Mina zkApp: ZK Access Management
+# Mina/SnarkyJS zkApp: ZK Access Management
 
 Anonymously authenticate to a digital space, based on ownership of an accessPass. 
 
-For example, the accesspasses can be a limited collection of NFTs which give you access to a certain community. 
+Examples:
+- Possession of an access pass gives entry to an online conference
+- Ownership of a limited series of NFTs gives access to a digital community
+- Holding a certain amount of a coin enables access to a premium lending platform
 
 You can get in to the community with your accesspass, but within the community you can go around anonymously, because of the private authentication. 
 
