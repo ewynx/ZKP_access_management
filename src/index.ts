@@ -1,3 +1,3 @@
-import { SPSAccessManagement } from './SPSAccessManagement.js';
+import { ZkAccessManagement } from './ZkAccessManagement.js';
 
-export { SPSAccessManagement };
+export { ZkAccessManagement as ZkAccessManagement };

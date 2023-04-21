@@ -1,39 +1,40 @@
 # Mina zkApp: ZKP Access Management
 
-The SecretPetSociety is planning to have an online gathering space, and wants to give members the possibility to enter the space without revealing who they are. 
+Anonymously authenticate to a digital space, based on ownership of an accessPass. 
 
-![SPS](SecretPetSociety.png)
+For example, the accesspasses can be a limited collection of NFTs which give you access to a certain community. 
+
+You can get in to the community with your accesspass, but within the community you can go around anonymous, because of the private authentication. 
+
+## Functionality
 
 This Access Management System contains the following functionality:
 - Award AccessPass (only by authority)
 - Transfer ownership of AccessPass
 - Authenticate anonymously
 
-Note: this is a Premium society with only 256 AccessPasses!
+Noe: there's a limited amount of accessPasses (256).
 
-## STATUS
+## State
+"While the state of a zkApp is public, method parameters are private." from the [Mina docs](https://docs.minaprotocol.com/zkapps/how-to-write-a-zkapp#public-and-private-inputs).
 
-Tests run
-Needs a cute frontend.
+In the state, the accessPasses and their owners will be stored in 2 MerkleTrees.
 
-## How to build
+An accessPass is currently represented as a public key. Ownership is stored as hash(accessPass, ownerPubkey). 
+
+
+## STATUS OF CODEBASE
+
+All tests pass. 
+
+### Testinstructions
+
 
 ```sh
 npm run build
-```
-
-## How to run tests
-
-```sh
 npm run test
-npm run testw # watch mode
 ```
 
-## How to run coverage
-
-```sh
-npm run coverage
-```
 
 ## License
 

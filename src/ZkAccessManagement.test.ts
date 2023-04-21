@@ -1,4 +1,5 @@
-import { MerkleWitness8, SPSAccessManagement } from './SPSAccessManagement';
+import { LocalBlockchain } from 'snarkyjs/dist/node/lib/mina';
+import { MerkleWitness8, ZkAccessManagement } from './ZkAccessManagement';
 import {
   isReady,
   shutdown,
@@ -8,50 +9,52 @@ import {
   PublicKey,
   AccountUpdate,
   MerkleTree,
-  Poseidon
+  Poseidon,
+  Signature,
+  UInt32
 } from 'snarkyjs';
 
-//??
 let proofsEnabled = true;
 
-// ALL PASS!!!!!
+/*
+ PASS  src/ZkAccessManagement.test.ts (2865.467 s)
+  ZkAccessManagement
+    ✓ generates and deploys the `ZkAccessManagement` smart contract (81524 ms)
+    ✓ award an AccessPass to pubKey (executed by authority) (181459 ms)
+    ✓ error if other entity than authority would try to award accesspass (76255 ms)
+    ✓ error when the index of the accesspass and the owner claim do not match up (71806 ms)
+    ✓ error when the nextIndex in the smart contract and the index of the new pass dont match (80126 ms)
+    ✓ correctly transferOwnershipAccessPass from current owner to new one (219358 ms)
+    ✓ error transferOwnershipAccessPass if its not the current owner signing (154397 ms)
+    ✓ cant do transferOwnershipAccessPass for another accesspass (different index) (150954 ms)
+    ✓ error transferOwnershipAccessPass if the accesspass doesnt exist (72813 ms)
+    ✓ correctly authenticate (294330 ms)
+    ✓ authenticate error with wrong privkey (is not owner of accesspass) (223947 ms)
+    ✓ authenticate should fail if the accesspass witness is not valid (212170 ms)
+    ✓ authenticate should fail when member tries to validate for incorrect accesspass (215098 ms)
+    ✓ authenticate should fail when incorrect block (not within range of 10 before) is signed (257492 ms)
+    ✓ correctly authenticate after transferring ownership (pass for new owner, fail for old owner) (468432 ms)
 
-// PASS  src/SPSAccessManagement.test.ts (853.74 s)
-// SPSAccessManagement
-//   ✓ generates and deploys the `SPSAccessManagement` smart contract (24551 ms)
-//   ✓ award an AccessPass to pubKey (executed by authority) (57215 ms)
-//   ✓ error if other entity than authority would try to award accesspass (26974 ms)
-//   ✓ error when the index of the accesspass and the owner claim do not match up (26914 ms)
-//   ✓ error when the nextIndex in the smart contract and the index of the new pass dont match (28251 ms)
-//   ✓ correctly transferOwnershipAccessPass from current owner to new one (91897 ms)
-//   ✓ error transferOwnershipAccessPass if its not the current owner signing (62013 ms)
-//   ✓ cant do transferOwnershipAccessPass for another accesspass (different index) (58112 ms)
-//   ✓ error transferOwnershipAccessPass if the accesspass doesnt exist (28153 ms)
-//   ✓ correctly authenticate (118092 ms)
-//   ✓ authenticate error with wrong privkey (is not owner of accesspass) (91323 ms)
-//   ✓ authenticate should fail if the accesspass is not valid (95424 ms)
-//   ✓ authenticate should fail when member tries to validate for incorrect accesspass (92146 ms)
+Test Suites: 1 passed, 1 total
+Tests:       15 passed, 15 total
+Snapshots:   0 total
+Time:        2865.616 s
+Ran all test suites.
+  ●  process.exit called with "0"
+*/
 
-// Test Suites: 1 passed, 1 total
-// Tests:       13 passed, 13 total
-// Snapshots:   0 total
-// Time:        853.827 s
-// Ran all test suites.
-// ●  process.exit called with "0"
-
-
-describe('SPSAccessManagement', () => {
+describe('ZkAccessManagement', () => {
   let deployerAccount: PublicKey,
     deployerKey: PrivateKey,
     zkAppAddress: PublicKey,
     zkAppPrivateKey: PrivateKey,
-    zkApp: SPSAccessManagement,
+    zkApp: ZkAccessManagement,
     validPassesTree: MerkleTree,
     claimedPassesTree: MerkleTree;
 
   beforeAll(async () => {
     await isReady;
-    if (proofsEnabled) SPSAccessManagement.compile();
+    if (proofsEnabled) ZkAccessManagement.compile();
   });
 
   beforeEach(() => {
@@ -61,7 +64,7 @@ describe('SPSAccessManagement', () => {
       Local.testAccounts[0]);
     zkAppPrivateKey = PrivateKey.random();
     zkAppAddress = zkAppPrivateKey.toPublicKey();
-    zkApp = new SPSAccessManagement(zkAppAddress);
+    zkApp = new ZkAccessManagement(zkAppAddress);
     validPassesTree = new MerkleTree(8);
     claimedPassesTree = new MerkleTree(8);
   });
@@ -77,7 +80,7 @@ describe('SPSAccessManagement', () => {
     const txn = await Mina.transaction(deployerAccount, () => {
       AccountUpdate.fundNewAccount(deployerAccount);
       zkApp.deploy();
-      zkApp.initState(deployerAccount, validPassesTree.getRoot(), claimedPassesTree.getRoot());
+      zkApp.initState(deployerKey, validPassesTree.getRoot(), claimedPassesTree.getRoot());
     });
     await txn.prove();
     // this tx needs .sign(), because `deploy()` adds an account update that requires signature authorization
@@ -85,11 +88,11 @@ describe('SPSAccessManagement', () => {
   }
 
   //WORKS
-  it('generates and deploys the `SPSAccessManagement` smart contract', async () => {
+  it('generates and deploys the `ZkAccessManagement` smart contract', async () => {
     await localDeploy();
     const num = zkApp.validPassesNextIndex.get();
-    const spsPublicKey = zkApp.spsPublicKey.get();
-    expect(spsPublicKey).toEqual(deployerAccount);
+    const authorityPublicKey = zkApp.authority.get();
+    expect(authorityPublicKey).toEqual(deployerAccount);
     expect(num).toEqual(Field(0));
   });
 
@@ -118,6 +121,7 @@ describe('SPSAccessManagement', () => {
     await txn1.sign([deployerKey]).send();
 
     // TODO check whether this updates the root correctly
+    
   });
 
   //WORKS
@@ -140,7 +144,6 @@ describe('SPSAccessManagement', () => {
         // NewOwner is not allowed to call this as the authority
         zkApp.awardAccessPass(newOwner.toPublicKey(), accessPass0Id, newOwner, accessPassValidityWitness, ownerValidityWitness);
       })
-      // await txn.prove();
     } catch (e: any) {
       error = e.message;
     }
@@ -350,9 +353,9 @@ describe('SPSAccessManagement', () => {
     expect(error).not.toEqual('initial');
   });
   
-  //////////////////////////////
-  //////// AUTHENTICATE ////////
-  //////////////////////////////
+  ////////////////////////////
+  ////// AUTHENTICATE ////////
+  ////////////////////////////
 
   // WORKS
   it('correctly authenticate', async () => {
@@ -390,13 +393,17 @@ describe('SPSAccessManagement', () => {
       zkApp.awardAccessPass(owner1.toPublicKey(), accessPass1Id, deployerKey, accessPass1Witness, owner1ValidityWitness);
     });
     await txn1.prove();
-    await txn1.sign([deployerKey]).send(); // what's this for exactly
+    await txn1.sign([deployerKey]).send();
 
     // Try to authenticate with user 0. Making these witness again because some leaves were added later
     let accessPass0ValidityWitness = new MerkleWitness8(validPassesTree.getWitness(accessPassIndex0));
     let accessOwnershipWitness = new MerkleWitness8(claimedPassesTree.getWitness(accessPassIndex0));
+
+    let signedBlockNr = Mina.getNetworkState().blockchainLength;
+    let sig = Signature.create(owner0, accessPass0Id.toFields().concat(signedBlockNr.toFields()));
+
     const txnAuth = await Mina.transaction(deployerAccount, () => {
-      zkApp.authenticate(owner0, accessPass0Id, accessPass0ValidityWitness, accessOwnershipWitness);
+      zkApp.authenticate(owner0.toPublicKey(), signedBlockNr, accessPass0Id, sig, accessPass0ValidityWitness, accessOwnershipWitness);
     });
     await txnAuth.prove();
     await txnAuth.sign([deployerKey]).send();
@@ -438,17 +445,21 @@ describe('SPSAccessManagement', () => {
       zkApp.awardAccessPass(owner1.toPublicKey(), accessPass1Id, deployerKey, accessPass1Witness, owner1ValidityWitness);
     });
     await txn1.prove();
-    await txn1.sign([deployerKey]).send(); // what's this for exactly
+    await txn1.sign([deployerKey]).send();
 
-    // Try to authenticate with user 0. Making these witness again because some leaves were added later
+    // Try to authenticate for accesspass 0. Making these witness again because some leaves were added later
     let accessPass0ValidityWitness = new MerkleWitness8(validPassesTree.getWitness(accessPassIndex0));
     let accessOwnershipWitness = new MerkleWitness8(claimedPassesTree.getWitness(accessPassIndex0));
+    
+    // signing for accesspass0
+    let signedBlockNr = Mina.getNetworkState().blockchainLength;
+    let sig = Signature.create(owner1, accessPass0Id.toFields().concat(signedBlockNr.toFields()));
 
     let error = '';
     try {
       const txn1 = await Mina.transaction(deployerAccount, () => {
         // Should error when the current owner is not the signer
-        zkApp.authenticate(owner1, accessPass0Id, accessPass0ValidityWitness, accessOwnershipWitness);
+        zkApp.authenticate(owner1.toPublicKey(), signedBlockNr, accessPass0Id, sig, accessPass0ValidityWitness, accessOwnershipWitness);
       });
     } catch (e: any) {
       error = e.message;
@@ -458,7 +469,7 @@ describe('SPSAccessManagement', () => {
   });
 
   // WORKS
-  it('authenticate should fail if the accesspass is not valid', async () => {
+  it('authenticate should fail if the accesspass witness is not valid', async () => {
     await localDeploy();
 
     // Award accessPass 0 to pubKey0
@@ -493,22 +504,23 @@ describe('SPSAccessManagement', () => {
       zkApp.awardAccessPass(owner1.toPublicKey(), accessPass1Id, deployerKey, accessPass1Witness, owner1ValidityWitness);
     });
     await txn1.prove();
-    await txn1.sign([deployerKey]).send(); // what's this for exactly
+    await txn1.sign([deployerKey]).send(); 
 
-    // Try to authenticate with user 0. Making these witness again because some leaves were added later
+    // Try to authenticate for user 0 with an old accessPassWitness
     let accessPass0ValidityWitness = accessPass0Witness; // this is an old witness and shouldnt work
     let accessOwnershipWitness = new MerkleWitness8(claimedPassesTree.getWitness(accessPassIndex0));
+    
+    let signedBlockNr = Mina.getNetworkState().blockchainLength;
+    let sig = Signature.create(owner0, accessPass0Id.toFields().concat(signedBlockNr.toFields()));
 
     let error = '';
     try {
       const txn1 = await Mina.transaction(deployerAccount, () => {
-        // Should error when the current owner is not the signer
-        zkApp.authenticate(owner1, accessPass0Id, accessPass0ValidityWitness, accessOwnershipWitness);
+        zkApp.authenticate(owner0.toPublicKey(), signedBlockNr, accessPass0Id, sig, accessPass0ValidityWitness, accessOwnershipWitness);
       });
     } catch (e: any) {
       error = e.message;
     }
-    // Should error because the current owner is not signing off the transfer of ownership
     expect(error).not.toEqual('initial');
   });
 
@@ -548,18 +560,22 @@ describe('SPSAccessManagement', () => {
       zkApp.awardAccessPass(owner1.toPublicKey(), accessPass1Id, deployerKey, accessPass1Witness, owner1ValidityWitness);
     });
     await txn1.prove();
-    await txn1.sign([deployerKey]).send(); // what's this for exactly
+    await txn1.sign([deployerKey]).send();
 
     // pubKey1 tries to validate with accessPass0 -> should fail
     let accessPass0ValidityWitness = new MerkleWitness8(validPassesTree.getWitness(accessPassIndex0));
     // pubKey1 owns accessPass1
     let accessOwnershipWitness = new MerkleWitness8(claimedPassesTree.getWitness(accessPassIndex1));
 
+    // privKey1 signs accessPass0
+    let signedBlockNr = Mina.getNetworkState().blockchainLength;
+    let sig = Signature.create(owner1, accessPass0Id.toFields().concat(signedBlockNr.toFields()));
+
     let error = '';
     try {
       const txn1 = await Mina.transaction(deployerAccount, () => {
         // Should error when the current owner is not the signer
-        zkApp.authenticate(owner1, accessPass0Id, accessPass0ValidityWitness, accessOwnershipWitness);
+        zkApp.authenticate(owner1.toPublicKey(), signedBlockNr, accessPass0Id, sig, accessPass0ValidityWitness, accessOwnershipWitness);
       });
     } catch (e: any) {
       error = e.message;
@@ -568,5 +584,128 @@ describe('SPSAccessManagement', () => {
     expect(error).not.toEqual('initial');
   });
 
-//TODO add authenticate after transferring ownership
+  // WORKS
+  it('authenticate should fail when incorrect block (not within range of 10 before) is signed', async () => {
+    await localDeploy();
+
+    // Award accessPass 0 to pubKey0
+    let accessPass0 = PrivateKey.random();
+    let accessPassIndex0 = 0n;
+    validPassesTree.setLeaf(accessPassIndex0, Poseidon.hash([accessPass0.toPublicKey().x]));
+    const accessPass0Witness = new MerkleWitness8(validPassesTree.getWitness(accessPassIndex0));
+
+    let owner0 = PrivateKey.random();
+    let accessPass0Id = accessPass0.toPublicKey();
+    claimedPassesTree.setLeaf(accessPassIndex0, Poseidon.hash([accessPass0Id.x, owner0.toPublicKey().x]));
+    const owner0ValidityWitness = new MerkleWitness8(claimedPassesTree.getWitness(accessPassIndex0));
+
+    const txn0 = await Mina.transaction(deployerAccount, () => {
+      zkApp.awardAccessPass(owner0.toPublicKey(), accessPass0Id, deployerKey, accessPass0Witness, owner0ValidityWitness);
+    });
+    await txn0.prove();
+    await txn0.sign([deployerKey]).send();
+
+    // Award accessPass 1 to pubKey1
+    let accessPass1 = PrivateKey.random();
+    let accessPassIndex1 = 1n;
+    validPassesTree.setLeaf(accessPassIndex1, Poseidon.hash([accessPass1.toPublicKey().x]));
+    const accessPass1Witness = new MerkleWitness8(validPassesTree.getWitness(accessPassIndex1));
+
+    let owner1 = PrivateKey.random();
+    let accessPass1Id = accessPass1.toPublicKey();
+    claimedPassesTree.setLeaf(accessPassIndex1, Poseidon.hash([accessPass1Id.x, owner1.toPublicKey().x]));
+    const owner1ValidityWitness = new MerkleWitness8(claimedPassesTree.getWitness(accessPassIndex1));
+
+    const txn1 = await Mina.transaction(deployerAccount, () => {
+      zkApp.awardAccessPass(owner1.toPublicKey(), accessPass1Id, deployerKey, accessPass1Witness, owner1ValidityWitness);
+    });
+    await txn1.prove();
+    await txn1.sign([deployerKey]).send();
+
+    // Try to authenticate with user 0. Making these witness again because some leaves were added later
+    let accessPass0ValidityWitness = new MerkleWitness8(validPassesTree.getWitness(accessPassIndex0));
+    let accessOwnershipWitness = new MerkleWitness8(claimedPassesTree.getWitness(accessPassIndex0));
+
+    let currentBlockNr = Mina.getNetworkState().blockchainLength;
+    let incorrectBlock: UInt32 = currentBlockNr.add(11);
+    let sig = Signature.create(owner0, accessPass0Id.toFields().concat(incorrectBlock.toFields()));
+
+    let error = '';
+    try {
+      const txn1 = await Mina.transaction(deployerAccount, () => {
+        // Should error because block is too old
+        zkApp.authenticate(owner0.toPublicKey(), incorrectBlock, accessPass0Id, sig, accessPass0ValidityWitness, accessOwnershipWitness);
+      });
+    } catch (e: any) {
+      error = e.message;
+    }
+    // Should error because the current owner is not signing off the transfer of ownership
+    expect(error).not.toEqual('initial');
+
+  });
+
+  // WORKS
+  it('correctly authenticate after transferring ownership (pass for new owner, fail for old owner)', async () => {
+    await localDeploy();
+
+    let accessPass0 = PrivateKey.random();
+    validPassesTree.setLeaf(0n, Poseidon.hash([accessPass0.toPublicKey().x]));
+    let accessPassIndex = 0n;
+    const accessPassWitness = new MerkleWitness8(validPassesTree.getWitness(accessPassIndex));
+
+    // Award accessPass 0 to pubKey0
+    let privKey0 = PrivateKey.random();
+    let accessPass0Id = accessPass0.toPublicKey();
+    claimedPassesTree.setLeaf(accessPassIndex, Poseidon.hash([accessPass0Id.x, privKey0.toPublicKey().x]));
+    const ownerValidityWitness = new MerkleWitness8(claimedPassesTree.getWitness(accessPassIndex));
+
+    const txn0 = await Mina.transaction(deployerAccount, () => {
+      zkApp.awardAccessPass(privKey0.toPublicKey(), accessPass0Id, deployerKey, accessPassWitness, ownerValidityWitness);
+    });
+    await txn0.prove();
+    await txn0.sign([deployerKey]).send();
+
+    // Now, change ownership from pubKey0 to pubKey1
+    let secretKey1 = PrivateKey.random();
+    let pubKey1 = secretKey1.toPublicKey();
+    claimedPassesTree.setLeaf(accessPassIndex, Poseidon.hash([accessPass0Id.x, pubKey1.x]));
+    const newOwnerValidityWitness = new MerkleWitness8(claimedPassesTree.getWitness(accessPassIndex));
+
+    const txn1 = await Mina.transaction(deployerAccount, () => {
+      zkApp.transferOwnershipAccessPass(privKey0, pubKey1, accessPass0Id, accessPassWitness, ownerValidityWitness, newOwnerValidityWitness);
+    });
+    await txn1.prove();
+    await txn1.sign([deployerKey]).send();
+
+    // 1. Authenticate for new owner = PASS
+    // User 1 owns accesspass 0
+    let accessPass0ValidityWitness = new MerkleWitness8(validPassesTree.getWitness(accessPassIndex));
+    let accessOwnershipWitness = new MerkleWitness8(claimedPassesTree.getWitness(accessPassIndex));
+
+    let signedBlockNr = Mina.getNetworkState().blockchainLength;
+    let sig = Signature.create(secretKey1, accessPass0Id.toFields().concat(signedBlockNr.toFields()));
+
+    const txnAuth = await Mina.transaction(deployerAccount, () => {
+      zkApp.authenticate(pubKey1, signedBlockNr, accessPass0Id, sig, accessPass0ValidityWitness, accessOwnershipWitness);
+    });
+    await txnAuth.prove();
+    await txnAuth.sign([deployerKey]).send();
+
+    // 2. Authenticate for old owner = FAIL
+    let currentBlockNr = Mina.getNetworkState().blockchainLength;
+    let sig2 = Signature.create(privKey0, accessPass0Id.toFields().concat(currentBlockNr.toFields()));
+
+    let error = '';
+    try {
+      const txn1 = await Mina.transaction(deployerAccount, () => {
+        // Should error because privKey0 is not the owner of this accesspass anymore
+        zkApp.authenticate(privKey0.toPublicKey(), currentBlockNr, accessPass0Id, sig, accessPass0ValidityWitness, accessOwnershipWitness);
+      });
+    } catch (e: any) {
+      error = e.message;
+    }
+
+    expect(error).not.toEqual('initial');
+  });
+
 });
