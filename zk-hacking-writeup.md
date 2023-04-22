@@ -7,6 +7,11 @@ This is a zkApp that handles anonymous authentication for members of a digital c
 
 You can get access to a digital space based on an accesspass, but nobody needs to know who you are. 
 
+Example applications:
+- Possession of an access pass gives entry to an online conference
+- Ownership of a limited series of NFTs gives access to a digital community
+- Holding a certain amount of a coin enables access to a premium lending platform
+
 ### Functionality
 This codebase implements the backend, issuing up to 256 accesspasses that allow members to correctly authenticate. 
 
@@ -32,3 +37,4 @@ For this project [MINA](https://docs.minaprotocol.com/) and [SnarkyJS](https://d
 4. After a break, review the code again and make an update version + added comments and documentation.
 
 A major challenge was the time it took to run tests. For the final version, running all tests took 2865.467s. 
+In the meantime while waiting for the tests, this smaller project was also created: [ZK validate (international) drivers license](https://github.com/ewynx/ZKP_validate_license).
